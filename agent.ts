@@ -65,68 +65,75 @@ Operating system: ${process.platform}`;
 
       // Handle the response and tool calls
       while (true) {
+        // Collect text blocks for response
         for (const block of response.content) {
           if (block.type === "text") {
             fullResponse += block.text;
-          } else if (block.type === "tool_use") {
-            console.log(`\x1b[36m🔧 Tool:\x1b[0m \x1b[33m${block.name}\x1b[0m(\x1b[32m${JSON.stringify(block.input)}\x1b[0m)`);
-            const toolResult = await AgentTools.executeTool(
-              block.name,
-              block.input
-            );
-
-            if (toolResult.success) {
-              console.log(`\x1b[32m✅ Success:\x1b[0m ${toolResult.result?.slice(0, 100)}${toolResult.result && toolResult.result.length > 100 ? '...' : ''}`);
-            } else {
-              console.log(`\x1b[31m❌ Error:\x1b[0m ${toolResult.error}`);
-            }
-
-            // Add tool use to messages
-            messages.push({
-              role: "assistant",
-              content: response.content
-            });
-
-            // Add tool result to messages
-            messages.push({
-              role: "user",
-              content: [
-                {
-                  type: "tool_result",
-                  tool_use_id: block.id,
-                  content: toolResult.success
-                    ? toolResult.result || "Tool executed successfully"
-                    : `Error: ${toolResult.error}`
-                }
-              ]
-            });
-
-            // Get follow-up response from Claude
-            response = await this.anthropic.messages.create({
-              model: "claude-sonnet-4-5-20250929",
-              max_tokens: 4000,
-              system: this.buildSystemPrompt(),
-              tools: this.tools.map(tool => ({
-                name: tool.name,
-                description: tool.description,
-                input_schema: tool.input_schema
-              })),
-              messages
-            });
-
-            break;
           }
         }
 
-        // Check if there are more tool calls
-        const hasToolCalls = response.content.some(block => block.type === "tool_use");
-        if (!hasToolCalls) {
-          // Add final response text
-          for (const block of response.content) {
-            if (block.type === "text") {
-              fullResponse += block.text;
-            }
-          }
+        // Collect all tool_use blocks
+        const toolUseBlocks = response.content.filter(
+          (block): block is Anthropic.Messages.ToolUseBlock => block.type === "tool_use"
+        );
+
+        // If there are tool calls, execute them all
+        if (toolUseBlocks.length > 0) {
+          // Execute all tools in parallel
+          const toolResults = await Promise.all(
+            toolUseBlocks.map(async (block) => {
+              console.log(`\x1b[36m🔧 Tool:\x1b[0m \x1b[33m${block.name}\x1b[0m(\x1b[32m${JSON.stringify(block.input)}\x1b[0m)`);
+              
+              const toolResult = await AgentTools.executeTool(
+                block.name,
+                block.input
+              );
+
+              if (toolResult.success) {
+                console.log(`\x1b[32m✅ Success:\x1b[0m ${toolResult.result?.slice(0, 100)}${toolResult.result && toolResult.result.length > 100 ? '...' : ''}`);
+              } else {
+                console.log(`\x1b[31m❌ Error:\x1b[0m ${toolResult.error}`);
+              }
+
+              return {
+                tool_use_id: block.id,
+                content: toolResult.success
+                  ? toolResult.result || "Tool executed successfully"
+                  : `Error: ${toolResult.error}`
+              };
+            })
+          );
+
+          // Add assistant message with all tool_use blocks
+          messages.push({
+            role: "assistant",
+            content: response.content
+          });
+
+          // Add user message with ALL tool_results
+          messages.push({
+            role: "user",
+            content: toolResults.map(result => ({
+              type: "tool_result" as const,
+              tool_use_id: result.tool_use_id,
+              content: result.content
+            }))
+          });
+
+          // Get follow-up response from Claude
+          response = await this.anthropic.messages.create({
+            model: "claude-sonnet-4-5-20250929",
+            max_tokens: 4000,
+            system: this.buildSystemPrompt(),
+            tools: this.tools.map(tool => ({
+              name: tool.name,
+              description: tool.description,
+              input_schema: tool.input_schema
+            })),
+            messages
+          });
+        } else {
+          // No more tool calls, we're done
           break;
         }
       }
