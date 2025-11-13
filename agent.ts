@@ -13,6 +13,14 @@ export class CodingAgent {
     this.tools = AgentTools.getAllTools();
   }
 
+  private cleanResponse(response: string): string {
+    // Remove markdown code blocks but keep the text explanations
+    const cleaned = response.replace(/```[\s\S]*?```/g, '[code block]');
+    
+    // Remove excessive newlines
+    return cleaned.replace(/\n{3,}/g, '\n\n').trim();
+  }
+
   private buildSystemPrompt(): string {
     const toolDescriptions = this.tools
       .map(tool => `- ${tool.name}: ${tool.description}`)
@@ -35,6 +43,9 @@ Important guidelines:
 - Provide clear explanations of what you're doing
 - Be careful with destructive operations
 - Ask for confirmation before making significant changes
+- Do NOT use markdown formatting in your responses (no code blocks, no bold/italic, no headers)
+- Respond in plain text only
+- When referring to code, describe it in words rather than showing code blocks
 
 Current working directory: ${process.cwd()}
 Operating system: ${process.platform}`;
@@ -82,19 +93,14 @@ Operating system: ${process.platform}`;
           // Execute all tools in parallel
           const toolResults = await Promise.all(
             toolUseBlocks.map(async (block) => {
-              console.log(`\x1b[36m🔧 Tool:\x1b[0m \x1b[33m${block.name}\x1b[0m(\x1b[32m${JSON.stringify(block.input)}\x1b[0m)`);
+              console.log(`\x1b[36m🔧 Calling tool:\x1b[0m \x1b[33m${block.name}\x1b[0m`);
               
               const toolResult = await AgentTools.executeTool(
                 block.name,
                 block.input
               );
 
-              if (toolResult.success) {
-                console.log(`\x1b[32m✅ Success:\x1b[0m ${toolResult.result?.slice(0, 100)}${toolResult.result && toolResult.result.length > 100 ? '...' : ''}`);
-              } else {
-                console.log(`\x1b[31m❌ Error:\x1b[0m ${toolResult.error}`);
-              }
-
+              // Tool result is sent to Claude but not logged to console
               return {
                 tool_use_id: block.id,
                 content: toolResult.success
@@ -167,16 +173,18 @@ Operating system: ${process.platform}`;
         continue;
       }
 
-      console.log("\nAgent: 🤔 Let me help you with that...\n");
+      console.log("\n\x1b[35m🤖 Agent:\x1b[0m Working on it...\n");
 
       try {
         const response = await this.chat(userInput);
-        console.log(response);
+        console.log("\x1b[35m┌─ Model Response ─────────────────────────────────\x1b[0m");
+        console.log("\x1b[35m" + this.cleanResponse(response) + "\x1b[0m");
+        console.log("\x1b[35m└──────────────────────────────────────────────────\x1b[0m");
       } catch (error) {
         console.error("Error:", error);
       }
 
-      console.log("\n" + "-".repeat(50) + "\n");
+      console.log("");
     }
   }
 }

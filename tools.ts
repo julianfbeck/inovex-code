@@ -88,16 +88,19 @@ export class AgentTools {
 
   static async bash(input: BashInput): Promise<ToolResult> {
     try {
-      // Use Bun's shell API for better cross-platform compatibility
-      const { $ } = await import("bun");
+      console.log(`  \x1b[90m$ ${input.command}\x1b[0m`);
+      
+      // Use Bun.spawn to capture output without displaying it
+      const proc = Bun.spawn(["sh", "-c", input.command], {
+        stdout: "pipe",
+        stderr: "pipe"
+      });
 
-      // Execute the command using Bun's shell - use .text() to get string output
-      const result = await $`sh -c ${input.command}`.nothrow();
+      const stdout = await new Response(proc.stdout).text();
+      const stderr = await new Response(proc.stderr).text();
+      const exitCode = await proc.exited;
 
-      const stdout = result.text();
-      const stderr = result.stderr.toString();
-
-      if (result.exitCode === 0) {
+      if (exitCode === 0) {
         return {
           success: true,
           result: stdout || "(no output)"
@@ -105,7 +108,7 @@ export class AgentTools {
       } else {
         return {
           success: false,
-          error: `Command failed with exit code ${result.exitCode}: ${stderr || stdout}`
+          error: `Command failed with exit code ${exitCode}: ${stderr || stdout}`
         };
       }
     } catch (error) {
