@@ -1,6 +1,10 @@
 # Coding Agent
 
-A simple coding agent built with Bun and the Anthropic SDK, implementing the 5 core primitives of a coding agent:
+A simple coding agent built with Bun and the Anthropic SDK, implementing the core primitives of a coding agent. This project was created during the inovex meetup "Talk 1: Inside Coding Agents: Architektur, Tooling und Umsetzung" by Julian on November 13, 2024 in Karlsruhe.
+
+## Core Tools
+
+This agent implements the essential tools for autonomous coding:
 
 1. **List Files Tool** - Browse directories and file structures
 2. **Bash Tool** - Execute shell commands
@@ -55,3 +59,14 @@ The agent follows the simple loop pattern:
 4. Agent processes results and responds
 
 Built with modern Bun APIs for optimal performance.
+
+## About the Meetup
+
+This coding agent was developed during a live demo at the inovex meetup in Karlsruhe. The talk focused on:
+
+- **AI Agent Architecture**: How AI agents internally function and interact with their environment
+- **Tool Integration**: Structured tool calls and protocols like MCP (Model Context Protocol)
+- **Coding Agents**: Agents capable of writing, executing, and systematically accessing external resources
+- **Technical Implementation**: Building and deploying a functional coding agent from scratch
+
+The session demonstrated the core concepts through hands-on implementation, showing how modern coding agents leverage structured interfaces to perform complex software engineering tasks autonomously.

@@ -6,7 +6,8 @@ import type {
   ListFilesInput,
   BashInput,
   EditFileInput,
-  CodeSearchInput
+  CodeSearchInput,
+  WebSearchInput
 } from "./types";
 
 export class AgentTools {
@@ -27,6 +28,7 @@ export class AgentTools {
 
   static async listFiles(input: ListFilesInput): Promise<ToolResult> {
     try {
+      console.log(`  \x1b[90mpath: ${input.path || "."}\x1b[0m`);
       const targetPath = resolve(input.path || ".");
       const items = await readdir(targetPath);
 
@@ -145,6 +147,9 @@ export class AgentTools {
 
   static async editFile(input: EditFileInput): Promise<ToolResult> {
     try {
+      const oldStrPreview = input.old_str === "" ? "[new file]" : input.old_str.slice(0, 50) + (input.old_str.length > 50 ? "..." : "");
+      const newStrPreview = input.new_str.slice(0, 50) + (input.new_str.length > 50 ? "..." : "");
+      console.log(`  \x1b[90mpath: ${input.path}, old: ${oldStrPreview}, new: ${newStrPreview}\x1b[0m`);
       const filePath = resolve(input.path);
 
       if (input.old_str === "") {
@@ -216,6 +221,7 @@ export class AgentTools {
 
   static async codeSearch(input: CodeSearchInput): Promise<ToolResult> {
     try {
+      console.log(`  \x1b[90mpattern: "${input.pattern}", path: ${input.path || "."}, type: ${input.file_type || "all"}\x1b[0m`);
       const args = ["rg"];
 
       // Add pattern
@@ -268,13 +274,70 @@ export class AgentTools {
     }
   }
 
+  // Web Search Tool
+  static webSearchDefinition: ToolDefinition = {
+    name: "web_search",
+    description: "Fetch the content of a website using curl. Returns the HTML content of the specified URL.",
+    input_schema: {
+      type: "object",
+      properties: {
+        url: {
+          type: "string",
+          description: "The URL of the website to fetch"
+        }
+      },
+      required: ["url"]
+    }
+  };
+
+  static async webSearch(input: WebSearchInput): Promise<ToolResult> {
+    try {
+      console.log(`  \x1b[90mfetching: ${input.url}\x1b[0m`);
+      
+      const proc = Bun.spawn([
+        "curl",
+        "-s",  // Silent mode
+        "-L",  // Follow redirects
+        "-A", "Mozilla/5.0 (compatible; WebSearchBot/1.0)",  // User agent
+        input.url
+      ], {
+        stdout: "pipe",
+        stderr: "pipe"
+      });
+
+      const stdout = await new Response(proc.stdout).text();
+      const stderr = await new Response(proc.stderr).text();
+      const exitCode = await proc.exited;
+
+      if (exitCode === 0) {
+        const contentLength = stdout.length;
+        const preview = stdout.slice(0, 500);
+        return {
+          success: true,
+          result: `Successfully fetched ${input.url} (${contentLength} bytes)\n\nContent:\n${stdout}`
+        };
+      } else {
+        return {
+          success: false,
+          error: `Failed to fetch URL: ${stderr || "Unknown error"}`
+        };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: `Failed to fetch website: ${error instanceof Error ? error.message : String(error)}`
+      };
+    }
+  }
+
   // Get all tool definitions
   static getAllTools(): ToolDefinition[] {
     return [
       this.listFilesDefinition,
       this.bashDefinition,
       this.editFileDefinition,
-      this.codeSearchDefinition
+      this.codeSearchDefinition,
+      this.webSearchDefinition
     ];
   }
 
@@ -289,6 +352,8 @@ export class AgentTools {
         return this.editFile(input);
       case "code_search":
         return this.codeSearch(input);
+      case "web_search":
+        return this.webSearch(input);
       default:
         return {
           success: false,
