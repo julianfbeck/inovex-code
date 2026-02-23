@@ -33,7 +33,3 @@ export interface CodeSearchInput {
   path?: string;
   file_type?: string;
 }
-
-export interface WebSearchInput {
-  url: string;
-}
